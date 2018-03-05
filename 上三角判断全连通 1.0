@@ -1,0 +1,128 @@
+# step1：n=[1，N]生成所有邻接矩阵，给出input，output点
+# step1.1：在step1中干掉不合理（不合理，被吸收，对称1在一起），并统计个数h（n）
+# step2：保存合理的邻接矩阵用于观察
+# step3：g（f=1，n）-h（n）表示n下的有值图
+# step4：对n，[1,n]求和表示n以内有值图个数，append在一个list里备用
+# step5：绘制曲线g（f=1，n）和list ，对n=[1，N]
+# 进一步（未完成）
+# step6：f可以不等于1了
+# step7：再干掉由于f带来的对称，并统计删减率（n，f，x(n,f) 3D图）
+
+import numpy as np
+import copy
+
+
+# step1实现，生成n维的所有邻接矩阵，只保存合理并记录有用信息
+def make_n_adjMatrix(n,f=1):
+    number = 0
+    sucess1=0
+    exponent = 2 ** (n * (n - 1) / 2)
+    exponent = int(exponent)
+    zeros = [[0 for i in range(n)] for j in range(n)]
+    for i in range(0, exponent):
+        a = bin(i)
+        a = a[2:]
+        lenth = len(a)
+        M = copy.deepcopy(zeros)
+        x = n - 2
+        y = n - 1
+        for j in range(lenth):
+            # k=exponent-j-1
+            #print('j=', j)
+            c = a[j]
+            c = int(c)
+            M[x][y] = c
+            if y > (x + 1):
+                y -= 1
+            else:
+                x -= 1
+                y = n - 1
+        number += 1
+        d=is_valid_graph(M,n)
+        #print('d=',d)
+        if d is True:
+            #print(M)
+            sucess1 += 1
+    return number,sucess1
+
+
+# 干掉不合理
+def is_valid_graph(darwin_net,n):
+    """
+    rules:
+    check whether each node connected in circuit
+    only one output unit
+    no input for input nodes
+    no output for output node
+    """
+
+    #nneuron = darwin_net.nneuron
+    nneuron=n
+    #adj_matrix = darwin_net._adjMat
+    adj_matrix = darwin_net
+    #neuron_depth = darwin_net.neuDepth
+    #max_depth = max(neuron_depth)
+
+    for i in range(nneuron):
+        connected_after = 0
+        connected_before = 0
+        if adj_matrix[i][i] > 0:
+            return False
+        else:
+            #depth = neuron_depth[i]
+            #before_neurons = [_ for _ in range(nneuron) if neuron_depth[_] < depth]
+            #after_neurons = [_ for _ in range(nneuron) if neuron_depth[_] > depth]
+            before_neurons = [_ for _ in range(i)]
+            after_neurons = [_ for _ in range(i+1,nneuron)]
+
+            for j in after_neurons:
+                if adj_matrix[i][j] > 0:
+                    connected_after = 1
+                    break
+
+            for j in before_neurons:
+                if adj_matrix[j][i] > 0:
+                    connected_before = 1
+                    break
+
+            if i == 0:
+                if connected_after == 0:
+                    return False
+            elif i == (n-1):
+                if connected_before == 0:
+                    return False
+            else:
+                if connected_after == 0 or connected_before == 0:
+                    return False
+
+    return True
+
+# step2实现
+
+# step3实现
+
+# step4实现
+
+# step5实现
+
+# class1,一些公式
+class Functions:
+
+    pass
+
+
+def main():
+    max_n=10
+    max_f=1
+    n=7
+    f=1
+    iniput=[1]
+    output=[n]
+    number,sucess1=make_n_adjMatrix(n)
+    print('number=', number)
+    print('sucess1=', sucess1)
+
+
+if __name__ == '__main__':
+
+    main()
