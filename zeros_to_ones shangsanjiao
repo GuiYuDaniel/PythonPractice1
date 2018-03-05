@@ -1,0 +1,29 @@
+import copy
+n=3
+f=1
+
+number=0
+exponent=2**(n*(n-1)/2)
+exponent=int(exponent)
+zeros=[[0 for i in range(n)] for j in range(n)]
+for i in range(0,exponent):
+    a=bin(i)
+    a=a[2:]
+    lenth=len(a)
+    M=copy.deepcopy(zeros)
+    x=n-2
+    y=n-1
+    for j in range(lenth):
+        #k=exponent-j-1
+        print('j=',j)
+        c=a[j]
+        c=int(c)
+        M[x][y]=c
+        if y > (x+1):
+            y-=1
+        else:
+            x-=1
+            y=n-1
+    number+=1
+    print(M)
+print(number)
