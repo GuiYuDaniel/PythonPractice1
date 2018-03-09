@@ -1,0 +1,92 @@
+#
+#
+#
+#
+#
+#
+#
+#
+# 实现两个功能：1，按Easy，Middle，Hard，Other四个级别定义一些test functions提供调用。
+#            2，模块内可以show函数图像
+# 命名规则：   testfunc_Level_Order     (Ps:testfunc_easy_0 = lambda x: np.sin(x)+np.cos(x) )
+# 调用：      testfunc_Level_Order(x)  (Ps:y = testfunc_easy_0(x) )
+#
+# 情况：1、异构同果；2、同核异序；3、密集(快速震荡)；4、一最多极；5、大中混小(微扰)；6、结果相似()；
+#      7、一种核数量占多；8、分段函数能力
+
+
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy.special as S
+
+
+# Level=Easy
+testfunc_easy_0 = lambda x: np.sin(x) + np.cos(x)
+testfunc_easy_1 = lambda x: np.exp(np.log(x))                   # 1 #6_0
+testfunc_easy_2 = lambda x: np.log(np.exp(x))                   # 1 #6_0
+testfunc_easy_3 = lambda x: np.log(np.sin(np.exp(x)))   # 2
+testfunc_easy_4 = lambda x: np.exp(np.sin(np.log(x)))   # 2
+testfunc_easy_5 = lambda x: np.sin(x) * (x**2)
+testfunc_easy_6 = lambda x: np.sin(x**2)
+testfunc_easy_7 = lambda x: np.cos(x**2)
+testfunc_easy_8 = lambda x: np.sin(x**3)  # 3
+testfunc_easy_9 = lambda x: np.cos(x**3)   # 3
+testfunc_easy_10 = lambda x: np.log(np.sin(x))
+testfunc_easy_11 = lambda x: np.exp(np.cos(x))
+testfunc_easy_12 = lambda x: np.sin(np.log(x**3))
+testfunc_easy_13 = lambda x: np.sin(x**2) + x**2    # 4
+testfunc_easy_14 = lambda x: x**5
+
+# Level=Middle
+testfunc_middle_0 = lambda x: np.sin(x**2) + x**3   # 5  # 6_2
+testfunc_middle_1 = lambda x: np.sin(x**2) + (x**3)**2   # 5  # 6_1
+testfunc_middle_2 = lambda x: np.sin(x**3) + (x**3)**3    # 5
+testfunc_middle_3 = lambda x: x**2 + x**4 + x**6     # 6_1
+testfunc_middle_4 = lambda x: np.cos(x)**3 + np.sin(x)**3
+testfunc_middle_5 = lambda x: np.cos(x)**6 + np.sin(x)**6
+testfunc_middle_6 = lambda x: np.log(x**2+np.exp(x))    # 6_0
+testfunc_middle_7 = lambda x: (x+np.sin(x)) * np.exp(x)
+testfunc_middle_8 = lambda x: np.exp(x)+np.log(x)+np.sin(x)+np.cos(x)+x**2+x**3
+testfunc_middle_9 = lambda x: np.exp(x)*np.log(x)*np.sin(x)*np.cos(x)*x**2*x**3
+testfunc_middle_10 = lambda x: 2 * np.sin(x)     # 2自己可就是八个神经元呢
+testfunc_middle_11 = lambda x: np.sin(2*x)
+testfunc_middle_12 = lambda x: np.cos(2*x) + 2*np.cos(x)
+testfunc_middle_13 = lambda x: np.cos(np.cos(np.cos(x))+np.cos(x))+np.sin(x)  # 7
+testfunc_middle_14 = lambda x: np.cos(np.cos(np.cos(np.cos(x))+np.cos(x))+np.cos(x))+np.sin(x)  # 7
+testfunc_middle_15 = lambda x: np.cos(np.cos(np.cos(np.cos(x))+np.cos(x))+np.cos(x))+x**3  # 7 # 5 # 6_2
+testfunc_middle_15 = lambda x: x*np.sin(x) + x*np.cos(2*x)
+testfunc_middle_16 = lambda x: 2 * x   # 1 # 其实2*x有多种构造，例如8+2，2+2。写这个的目的是为了看各种构造在结果中的比例，期于尽量找到简单的构造！
+
+# Level=Hard
+testfunc_hard_0 = lambda x: np.sin((np.exp(np.cos((np.log(x))**3)))**2)  # 1
+testfunc_hard_1 = lambda x: np.exp(np.sin((np.cos((np.log(x))**3))**2))   # 1
+testfunc_hard_2 = lambda x: np.sin((np.exp(np.cos((np.log(x))**3)))**2) + np.sin(x)
+testfunc_hard_3 = lambda x: np.sin((np.exp(np.cos((np.log(x))**3)))**2) + np.cos(x)
+testfunc_hard_4 = lambda x: np.sin((np.exp(np.cos((np.log(x))**3)))**2) + np.log(x)
+testfunc_hard_5 = lambda x: 2 * (np.exp(x)+np.log(x)+np.sin(x)+np.cos(x)+x**2+x**3)
+
+# Level=Other
+testfunc_other_0 = lambda x: x-x                # 0
+testfunc_other_1 = lambda x: x-x + np.pi    # pi
+testfunc_other_2 = lambda x: x-x + np.e     # e
+testfunc_other_3 = lambda x: x-x - 1       # -1
+testfunc_other_4 = lambda x: np.sqrt(x)
+testfunc_other_5 = lambda x: 1/x
+testfunc_other_6 = lambda x: np.floor(x)    # 阶梯
+testfunc_other_7 = lambda x: S.gamma(x)
+testfunc_other_8 = lambda x: S.gammaln(x)
+testfunc_other_9 = lambda x: S.log1p(x)
+
+
+
+
+
+# show
+def easyshow(function_name):
+    x=np.arange(-10,10,0.01)
+    y=function_name
+    plt.plot(x,y(x),'g')
+    plt.show()
+
+easyshow(testfunc_hard_5)
+
