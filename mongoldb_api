@@ -1,0 +1,369 @@
+# _*_ coding:utf-8 _*_
+#
+###############################################################################################
+# 功能：向mongodb访问Model，weightfile有关信息
+###############################################################################################
+# 思路：仿照hw的mongodb_api所写，功能一致，把原来EA相关的Table内容改成了Model,weightfile相关的Table内容
+###############################################################################################
+# 供外面调用的函数：
+# 一、check：
+# 函数：value_type_check(key, value, table)      ；返回：key 或 Error
+# 函数：record_type_check(record, table)         ；返回：None         ；动作：logger.Error
+# 二、修改：
+# 1，insert： # is create!
+# 函数：insert_one_record(record, table)         ；返回：obj_id       ；动作：insert 或logger.debug
+# 函数：insert_many_records(records, table)      ；返回：obj_id       ；动作：insert 或logger.debug
+# 2，delete：
+# 函数：delete_one_by_id(id, table)              ；返回：None         ；动作：delete 或 logger.Error 或 logger.debug
+# 函数：delete_many_by_conds(condition, table)   ；返回：None         ；动作：delete 或 logger.debug
+# 3，update：
+# 函数：update_one_by_id(id, field, value, table)；返回：None    ；动作：update 或 logger.Error 或 logger.debug
+# 函数：update_record_by_id(id, record, table)   ；返回：None    ；动作：update 或 logger.Error 或 logger.debug
+# 函数：update_many_by_value(field, value_old, value_new, table)；返回：None ；动作：update 或 logger.Error 或 logger.debug
+# 三、get：
+# 函数：get_all_colls()                                       ；返回：db.collection_names()
+# 函数：get_coll_count(table)                                 ；返回：count
+# 函数：get_one_by_id(id, table)                              ；返回：obj          ；动作：logger.debug
+# 函数：get_many_by_conds(table, condition=None)              ；返回：objs         ；动作：logger.debug
+# 函数：get_all_by_conds_fields(fields, table, condition=None)；返回：None 或 objs ；动作 或logger.debug
+###############################################################################################
+#
+import pymongo
+import numpy as np
+from bson.objectid import ObjectId
+from darwinutils.log import get_task_logger
+
+logger = get_task_logger(__name__)
+
+# 改了传入参数db的默认值，使其指向model
+def get_db(ip="localhost", port=27017, db="darwin_model"): # 连数据库，返回指明的数据 # 读／写的第一步
+    """
+    Create and connect to the target database in mongodb server
+    :param ip: server ip
+    :type ip: str
+    :param port: server port
+    :type port: int
+    :param: db: target database name
+    :type: db: str
+    :return: target database pymongo object
+    :rtype: pymongo.database.Database
+    """
+    client = pymongo.MongoClient(ip, port)
+    tdb = client[db]
+    return tdb
+
+# 改了所有的table名称，table内容
+def get_type_dict(): # 初始化占位置
+    """
+    Generate type dictionary for each table in database
+    :return: A dict for each table
+    :rtype: dict
+    """
+
+    model_type_dict = {'graph_number': int,
+                       'weight_bias_path': str,
+                       'Owner': str,
+                       'node_info': dict,
+                       # {int:str} , means {node_number:node_name} # node_name is the tf_file saved by
+                       'custom': ...}
+
+
+    return {"model_management": model_type_dict}
+
+# 注释掉了一些logger，后面要不要加size和real——duration的logger功能待定吧
+def value_type_check(key, value, table): # 早些验证，防止后边出事
+    """
+    Check data type of a key-value pair
+    :param key: key in key-value pair
+    :type key: str
+    :param value: value in key-value pair
+    :type: value: any
+    :param table: table name to which the key-value pair belongs
+    :type: table: str
+    :return: None
+    """
+    if value is None:
+        """Not check it"""
+        raise KeyError("The value of field {} in table {} is None.".format(key, table))
+    else:
+        type_dict = get_type_dict()[table]
+        design_type = str(type_dict[key]).split("'")[1].split("'")[0]
+        real_type = str(type(value)).split("'")[1].split("'")[0]
+        if real_type != design_type:
+            error_lst = [design_type, key, table, real_type]
+            TypeError = "TypeError: {0[0]} expected in field [{0[1]}] of table [{0[2]}], find {0[3]} instead".format(error_lst)
+            raise KeyError(TypeError)
+#        if table == "dl_stat" and key == "flag" and value not in ["good", "bad", "candidate"]:
+#            raise KeyError("The value of field [flag] in table [dl_stat] need be good/bad/candidate!")
+#        if table == "ea_job" and key == "data_size":
+#            logger.info("The value of field [data_size] in table [ea_job] is in MByte.")
+#        if table == "train_data_info" and key == "data_size":
+#            logger.info("The value of field [data_size] in table [train_data_info] is in MByte.")
+#        if table == "ea_stat" and key == "real_ea_duration":
+#            logger.info("The value of field [real_ea_duration] in table [ea_stat] is in Hours.")
+        return key
+
+# 无改动
+def record_type_check(record, table):
+    """
+    Check data type of a complete record
+    :param record: a complete record
+    :type record: dict
+    :param table: table name to which the record belongs
+    :type: table: str
+    :return: None
+    """
+    removed_keys = []
+    for x in record.keys():
+        try:
+            value_type_check(x, record[x], table)
+        except KeyError as e:
+            logger.error("Value Check Error: {} for table {}".format(str(e), table))
+            removed_keys.append(x)
+    for key in removed_keys:
+        record.pop(key)
+    return None
+
+# 法1：改了table_lst
+# 法2：将table_lst的获取方式由定义变为引用。牺牲一点性能换取以后只修改一处
+def insert_one_record(record, table):
+    """
+    Insert one record into table
+    :param record: a complete record
+    :type record: dict
+    :param table: table name to which the record belongs
+    :type: table: str
+    :return: object id of new insert id
+    :rtype: bson.objectid.ObjectId
+    """
+    db = get_db()
+    table_lst = list(get_type_dict().keys())
+#    table_lst = ["model_management"]
+    if table in table_lst:
+        post = db[table]
+        record_type_check(record, table)
+        obj_id = post.insert(record)
+        logger.debug("Insert record in table {} done".format(table))
+    else:
+        raise ValueError("Do not create a new table!")
+    return obj_id
+
+# 法2：将table_lst的获取方式由定义变为引用。牺牲一点性能换取以后只修改一处
+def insert_many_records(records, table):
+    """
+    Insert many records into table
+    :param records: several complete records
+    :type records: list
+    :param table: table name to which the record belongs
+    :type: table: str
+    :return: object id of new insert ids
+    :rtype: list
+    """
+    db = get_db()
+    table_lst = list(get_type_dict().keys())
+    if table in table_lst:
+        post = db[table]
+        for record in records:
+            record_type_check(record, table)
+        obj_id = post.insert(records)
+        logger.debug("Insert %d records in table {} successfully.".format(len(records), table))
+    else:
+        raise Exception("Do not create a new table!")
+    return obj_id
+
+# 无改动
+def delete_one_by_id(id, table):
+    """
+    Delete one record by object id
+    :param id: object id
+    :type id: str
+    :param table: table name which will be delete record
+    :type: table: str
+    :return: None
+    """
+    if id is None or table is None:
+        logger.error("Input parameters are None")
+        return None
+    db = get_db()
+    post = db[table]
+    try:
+        post.remove(ObjectId(str(id)))
+        logger.debug("Remove one record from table {} successfully.".format(table))
+    except Exception as e:
+        logger.error("Remove one record from table {} failed. {}".format(table, str(e)))
+    return None
+
+# 无改动
+def delete_many_by_conds(condition, table):
+    """
+    Delete many records by object condition
+    :param condition: delete condition
+    :type condition: dict
+    :param table: table name which will be delete records
+    :type: table: str
+    :return: None
+    """
+    db = get_db()
+    post = db[table]
+    c0 = get_coll_count(table)
+    post.remove(condition)
+    c1 = get_coll_count(table)
+    logger.debug("Remove {} record from table {} successfully.".format(c0-c1, table))
+    return None
+
+# 无改动
+def update_one_by_id(id, field, value, table):
+    """
+    Update one field of a record by object id
+    :param id: target object id
+    :type id: str
+    :param field: field need to be updated
+    :type: field: str
+    :param value: update value of field
+    :type: value: any
+    :param table: table name which will be updated
+    :type: table: str
+    :return: None
+    """
+    db = get_db()
+    post = db[table]
+    obj = get_one_by_id(id, table)
+    if obj is not None:
+        try:
+            value_type_check(field, value, table)
+        except KeyError as e:
+            logger.error("Update record {} in table {} failed by value_type_check {}".format(id,table, str(e)))
+            return
+        obj[field] = value
+        post.save(obj)
+        logger.debug("Update one record in table {} successfully.".format(table))
+    else:
+        logger.error("You are trying to update an empty record!")
+    return None
+
+# 无改动
+def update_record_by_id(id, record, table):
+    """
+    Update one record by object id
+    :param id: target object id
+    :type id: str
+    :param field: field need to be updated
+    :type: field: str
+    :param value: update value of field
+    :type: value: any
+    :param table: table name which will be updated
+    :type: table: str
+    :return: None
+    """
+    db = get_db()
+    post = db[table]
+    obj = get_one_by_id(id, table)
+    if record is None or len(record.items()) == 0:
+        logger.error("Invalid record for id {}".format(id))
+        return None
+    if obj is not None:
+        record_type_check(record, table)
+        record['_id'] = id
+        post.save(record)
+        logger.debug("Update one record in table {} successfully.".format(table))
+        return id
+    else:
+        logger.error("You are trying to update an empty record!")
+    return None
+
+# 无改动
+def update_many_by_value(field, value_old, value_new, table):
+    """
+    Update many records by value
+    :param field: field need to be updated
+    :type: field: str
+    :param value_old: value of field need to be replaced
+    :type: value_old: any
+    :param value_new: update value of field
+    :type: value_new: any
+    :param table: table name which will be updated
+    :type: table: str
+    :return: None
+    """
+    db = get_db()
+    post = db[table]
+    obj = get_many_by_conds(condition={field: value_old}, table=table)
+    if obj is not None:
+        try:
+            value_type_check(field, value_new, table)
+        except KeyError as e:
+            logger.error("Update table {} failed {}".format(table, str(e)))
+            return None
+        post.update_many({field: value_old}, {'$set': {field: value_new}})
+        logger.debug("Update {} record successfully in table {}.".format(len(obj), table))
+    else:
+        logger.error("You are trying to update empty records!")
+    return None
+
+def get_all_colls(): # 辅助查找的工具
+    """
+    Get all collection names in database
+    :return: collections names
+    :rtype: list
+    """
+    db = get_db()
+    return db.collection_names()
+
+def get_coll_count(table):
+    """
+    Get records number of target table
+    :param: table: table name need to be count
+    :type: table: str
+    :return: records number
+    :rtype: int
+    """
+    db = get_db()
+    post = db[table]
+    count = post.count()
+    return count
+
+def get_one_by_id(id, table):
+    """
+    Get one record by object id
+    :param: table: target table name
+    :type: table: str
+    :return: record with target object id
+    :rtype: dict
+    """
+    db = get_db()
+    post = db[table]
+    obj = post.find_one({"_id": ObjectId(str(id))})
+    logger.debug("Find one record from table {}.".format(table))
+    return obj
+
+def get_many_by_conds(table, condition=None):
+    """
+    Get many record by condition
+    :param condition: filter condition
+    :type condition: dict
+    :param: table: target table name
+    :type: table: str
+    :return: records with target object id
+    :rtype: list
+    """
+    db = get_db()
+    post = db[table]
+    objs = [x for x in post.find(condition)]
+    logger.debug("Find {} records from table {}.".format(len(objs), table))
+    return objs
+
+def get_all_by_conds_fields(fields, table, condition=None):
+    db = get_db()
+    post = db[table]
+    objs = []
+    if isinstance(fields, list):
+        count = 1
+        field_filter = {"_id": 0}
+        for field in fields:
+            field_filter[field] = count
+            count += 1
+        objs = post.find(condition, field_filter)
+        objs = [x for x in objs]
+        logger.debug("Find {} records from table {}.".format(len(objs), table))
+        return objs
+    return None
